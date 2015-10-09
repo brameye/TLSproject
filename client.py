@@ -7,7 +7,7 @@
 
 
 
-
+import ssl
 import socket
 import sys
 import re
@@ -24,7 +24,7 @@ def TCPTalk(s, response):
 
 def send(socket, mailFrom):
 	#mailfrom
-	response = "MAIL FROM " + mailFrom
+	response = "MAIL FROM: " + mailFrom
 	serverReply = TCPTalk(socket, response)
 	if serverReply[:3] != '250':
 		print serverReply
@@ -38,7 +38,7 @@ def send(socket, mailFrom):
 		sys.exit(1)
 		#while 1: THIS IS FOR ERROR CHECKING (if i implement it)
 	
-	response = "RCPT TO " + rcpt
+	response = "RCPT TO: " + rcpt
 	serverReply = TCPTalk(socket, response)
 	if serverReply[:3] != '250':
 		print "\nMail Operation Failed...aborting program...."
@@ -141,9 +141,22 @@ def main():
 	#create new secure connection
 
 	secureCS = ssl.wrap_socket(clientSocket, 
-				   ca_certs='cert.pem',
+				   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
 				   cert_reqs=ssl.CERT_REQUIRED,
 				   ssl_version=ssl.PROTOCOL_TLSv1)
+
+
+	print "Testing secure connection....\n"	
+
+	time.sleep(5)
+
+	msg = "EHLO " + secureCS.gethostname()
+	serverReply = TCPTalk(secureCS, msg)
+	
+	if serverReply[:3] != '250':
+		print("Error establishing TLS connection. Program shutting down....")
+		sys.exit(1)
+
 
 	global user
 
