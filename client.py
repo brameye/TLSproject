@@ -14,16 +14,17 @@ import re
 import os
 import time
 
-user = "null"
-
+#user = "null"
+domain = "@495fs15.edu"
 
 def TCPTalk(s, response):
 	s.send(response)
 	reply = s.recv(1024)
 	return reply
 
-def send(socket, mailFrom):
+def send(socket):
 	#mailfrom
+	mailFrom = user + domain
 	response = "MAIL FROM: " + mailFrom
 	serverReply = TCPTalk(socket, response)
 	if serverReply[:3] != '250':
@@ -37,20 +38,25 @@ def send(socket, mailFrom):
 		print "Invalid Email--try again\n"
 		sys.exit(1)
 		#while 1: THIS IS FOR ERROR CHECKING (if i implement it)
-	
+	print '2'
 	response = "RCPT TO: " + rcpt
 	serverReply = TCPTalk(socket, response)
+	#DEBUG STATEMENT
+	print '1'
+	print serverReply
 	if serverReply[:3] != '250':
 		print "\nMail Operation Failed...aborting program...."
 		sys.exit(1)
 	print "Please enter the message to be sent. Complete message entry with a '.' on a line by itself.\n"
 	print 'From	: ' + mailFrom + '\n'
 	print 'To	: ' + rcpt	+ '\n'
-	serverReply = TCPTalk(socket, 'DATA')	
-	if serverReply[:3] != '250':
+	serverReply = TCPTalk(socket, 'DATA')
+	#DEBUG STATEMENT
+	print serverReply	
+	if serverReply[:3] != '334':
 		print "\nMail Operation Failed, server error received. Program exiting...\n"
 		sys.exit(1)
-	userIn = rawinput('Subject: ')
+	userIn = raw_input('Subject: ')
 	print'\n'
 	body = 'Subject: '
 
@@ -94,8 +100,10 @@ def saveMail(path, count, getReply):
 
 def quitSession(s):
 	serverReply = TCPTalk(s, 'QUIT')
+	
 	if serverReply[:3] == '221':
 		print "Program shutting down, goodbye....\n"
+	s.close()
 	exit()
 
 def main():
@@ -116,12 +124,20 @@ def main():
 	print "Welcome to Brad's SMTP + TLS client program!\nEstablishing server connection....\n"
 	
 	clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	clientSocket.connect((serverName, tcpPort))
+
+	secureCS = ssl.wrap_socket(clientSocket, 
+				   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
+				   cert_reqs=ssl.CERT_REQUIRED,
+				   ssl_version=ssl.PROTOCOL_TLSv1)
+
+
+
+	secureCS.connect((serverName, tcpPort))
 	
 	greeting = 'HELO ' + socket.gethostname()
 	global serverHostname 
 	serverHostName = socket.gethostname()
-	serverReply = TCPTalk(clientSocket, greeting)
+	serverReply = TCPTalk(secureCS, greeting)
 
 
 	if serverReply[:3] != '220':
@@ -132,37 +148,37 @@ def main():
 
 	#tell the server that we want TCP TLS
 
-	msg = "STARTTLS"
-	serverReply = TCPTalk(clientSocket, msg)
+	#msg = "STARTTLS"
+	#serverReply = TCPTalk(clientSocket, msg)
 	
-	if serverReply[:8] != "STARTTLS":
-		print "Error establishing secure SMTP connection...shutting down"
+	#if serverReply[:8] != "STARTTLS":
+	#	print "Error establishing secure SMTP connection...shutting down"
 	
 	#create new secure connection
 
-	secureCS = ssl.wrap_socket(clientSocket, 
-				   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
-				   cert_reqs=ssl.CERT_REQUIRED,
-				   ssl_version=ssl.PROTOCOL_TLSv1)
+	#secureCS = ssl.wrap_socket(clientSocket, 
+	#			   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
+	#			   cert_reqs=ssl.CERT_REQUIRED,
+	#			   ssl_version=ssl.PROTOCOL_TLSv1)
+
+	#secrureCS = ssl.wrap_socket(clientSocket, ca_certs="server.crt", cert_reqs=ssl.CERT_REQUIRED)
 
 
 	print "Testing secure connection....\n"	
 
-	time.sleep(5)
+	#time.sleep(5)
 
-	msg = "EHLO " + secureCS.gethostname()
-	serverReply = TCPTalk(secureCS, msg)
+	#msg = "EHLO " + secureCS.gethostname()
+	#serverReply = TCPTalk(secureCS, msg)
 	
-	if serverReply[:3] != '250':
-		print("Error establishing TLS connection. Program shutting down....")
-		sys.exit(1)
+	#if serverReply[:3] != '250':
+	#	print("Error establishing TLS connection. Program shutting down....")
+	#	sys.exit(1)
 
 
 	global user
 
 	user = raw_input("Please enter your username\n")
-	#global user
-	#user = username
 	userEmail = user + eDomain
 
 	while 1:

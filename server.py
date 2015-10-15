@@ -10,53 +10,86 @@ import threading
 import os
 import datetime
 import sys
-import time
 
 
-def TCP_Thread_Handler(cSocket, addr, hFlag, tFlag):
+
+def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
+	cSocket = ssl.wrap_socket(cSocket,
+				server_side=True, 
+				certfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
+				keyfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
+				ssl_version=ssl.PROTOCOL_TLSv1)
 	print "Got a TCP connection!\n"
 	while 1:
 		msg = cSocket.recv(1024)
 		if 'HELO' in msg:
-			hFlag = 1
+			heloFlag = 1
 			response = "220 Hello there, old friend"
-			cSocket.send(response)
-		elif 'STARTTLS' in msg:
-			if hFlag == 1:
-				response = "STARTTLS"
-				cSocket = ssl.wrap_socket(cSocket,
-							server_side=True, 
-						  	certfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
-						  	keyfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
-						  	ssl_version=ssl.PROTOCOL_TLSv1)
-				tFlag = 1
-				time.sleep(5)
-				cSocket.send(response)
-			else:
-				response = "503 Bad Sequence of Commands"
-				cSocket.send(response)
-		elif 'EHLO' in msg:
-			if tFlag == 1:
-				response = "250 Secure Connection Established"
-				cSocket.send(response)
-			else:
-				response = "503 Bad Sequence of Commands"
-				cSocket.send(response)
 		elif 'MAIL FROM:' in msg:
-			if heloFlag == 1 and tFlag == 1:
+			if heloFlag == 1:
 				sender = msg.split(':')
 				global mailFrom
 				mailFrom = sender[1]
+				print mailFrom
 				response = "250 Requested Action Completed"
-				cSocket.send(response)
 			else:
 				response = "503 Bad Sequence of Commands"		
-				cSocket.send(response)
-		print 'STOPPED HERE!!!'
-		#STOPPED HERE!!!!
-		#todo: maybe consolidate send statements to one at the end of loop
+		elif 'RCPT TO:' in msg:
+			if heloFlag == 1:
+				global rcptTo
+				response = "250 Requested Action Completed"
+				begin = msg.find(':') + 2
+				rcptTo = msg[begin:]
+				end = msg.find('@', begin)
+				path = 'db/' + msg[begin:end]
+				if not os.path.exists(path): 
+					os.mkdir(path)
+			else:
+				response = '503 Bad Sequence of Commands'
+		elif 'DATA' in msg:
+			if heloFlag == 1:
+				response = '334 Please Enter Data'
+			else:
+				response = '503 Bad Sequence of Commands'
+		elif 'Subject' in msg:
+			response = '250 Requested Mail Action Completed'
+			CreateEmail(msg)
+		elif 'QUIT' in msg:
+			if heloFlag == 1:
+				response = '221 SMTP Channel shutting down...'
+				
+			else:
+				response = '503 Bad Sequence of Commands'
+		else:
+			response = '500 Syntax Error -- command unrecognized'
+
+		cSocket.send(response)
+		
+
+def CreateEmail(msg):
+	t = timeStamp()
+	rcpt = rcptTo.split('@')
+	path = ('db/' + rcpt[0] + '/')
+	fileCount = countFiles(path) + 1
+	pre = str(fileCount).zfill(3)
+	filename = pre + '.email'
+	data = 'Date: ' + t + '\n' + 'From: ' + mailFrom + '\n' + 'To: ' + rcptTo + '\n'
+	data = data + msg
+	email = open(path + filename, 'w')
+	email.write(data)
+	email.close()
+	#debug statement
+	print data	
+	return
 
 
+def timeStamp():
+	ts = str(datetime.datetime.now().strftime("%A, %d, %B %Y %I:%M%p"))
+	return ts
+
+def countFiles(path):
+	num = len([e for e in os.walk(path).next()[2] if e[-6:] == '.email'])
+	return num
 
 
 def CheckRootPath(path):
