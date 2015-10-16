@@ -1,4 +1,4 @@
-#CS495 Independent Study Fall 2015 - Secure Network Communications 
+#CS495 Independent Study Fall 2015 - Secure Network Communications //  Dr. Gamage
 # @Southern Illinois University Edwardsville
 #Brad Meyer - brameye@gmail.com
 #client.py -- the clientside in a simple SMTP/TLS program
@@ -13,28 +13,31 @@ import sys
 import re
 import os
 import time
+import pprint
 
-#user = "null"
 domain = "@495fs15.edu"
 serverHostName = socket.gethostname()
 
 
+#This function just handles sending via the socket and then blocking/waiting for a response from the server
 def TCPTalk(s, response):
 	s.send(response)
 	reply = s.recv(1024)
 	return reply
 
+#This function handles a user instance where an invalid password is being submitted.
+#Error code 235 indicates password success, and the pwflag is flipped to indicate that and end the loop.
 def PasswordHandler(socket, password):
 	pwflag = 0
 	while pwflag == 0:
 		msg = TCPTalk(socket, password)
-		#DEBUG STATEMENT
-		print msg
 		if '235' in msg:
 			pwflag = 1
 		else:
 			password = raw_input("Invalid Password -- Try Again\nPlease enter your password:")
-	
+
+#This function handles the email building on the client end
+#Code 250 means success
 def send(socket):
 	#mailfrom
 	mailFrom = user + domain
@@ -45,18 +48,13 @@ def send(socket):
 		print "\nMail Operation Failed...aborting program...."
 		sys.exit(1)
 	#recp to
-	#i did not implement any error catching here
+	#i did not implement any serious error catching here, other than to check the domain. Consider disallowing special characters for email usernames
 	rcpt = raw_input("Enter the recipient's email. Please include the domain (@495fs15.edu): ")
 	if "495fs15.edu" not in rcpt:
 		print "Invalid Email--try again\n"
 		sys.exit(1)
-		#while 1: THIS IS FOR ERROR CHECKING (if i implement it)
-	print '2'
 	response = "RCPT TO: " + rcpt
 	serverReply = TCPTalk(socket, response)
-	#DEBUG STATEMENT
-	print '1'
-	print serverReply
 	if serverReply[:3] != '250':
 		print "\nMail Operation Failed...aborting program...."
 		sys.exit(1)
@@ -64,57 +62,60 @@ def send(socket):
 	print 'From	: ' + mailFrom + '\n'
 	print 'To	: ' + rcpt	+ '\n'
 	serverReply = TCPTalk(socket, 'DATA')
-	#DEBUG STATEMENT
-	print serverReply	
+	#Code 334 indicates to proceed with SMTP data transmission
 	if serverReply[:3] != '334':
 		print "\nMail Operation Failed, server error received. Program exiting...\n"
 		sys.exit(1)
 	userIn = raw_input('Subject: ')
 	print'\n'
 	body = 'Subject: '
-
+	#This handles EOF for the data
 	while userIn != '.':
 		body = body + userIn + '\n'
 		userIn = raw_input()
 	serverReply = TCPTalk(socket, body)
 	return
 
-
+#This functin handles the email retrieval 
 def retrieve(socket):
 	path = user + '/'
+	#create directory to dump emails
 	if not os.path.exists(path):
 		os.mkdir(path)
-		
+	#ask the server how many emails exist
 	response = "USER " + user
 	serverReply = TCPTalk(socket, response) 
 	print user + ", you have " + serverReply[0] + " messages...\n"
 	if serverReply[0] != '0':
 		messageCount = raw_input("How many emails would you like to retieve?\n")
+		#Create HTTP GET Statement
 		getReq = 'GET /db/' + user + '/ HTTP/1.1\nHost: ' + serverHostName + '\nCount: ' + messageCount
 		serverReply = TCPTalk(socket, getReq)
-		#NOTE: REMOVD '[0]' from serverReply's betlow this statement
 		if 'HTTP/1.1 200 OK' not in serverReply:
-			#DEBUG STATEMENT
-			print serverReply
-			print serverReply[0]
 			print "Email retrieveal unsuccessful, please try again"
 			return
 		saveMail(path, int(messageCount), serverReply)
 	else:
-		print "\nThere are no messages available for retrieveal... :(\n"
+		print "\nThere are no messages available for retrieval... :(\n"
 	return
 
+#This function saves the mail received via the GET statement (retrieve function)
 def saveMail(path, count, getReply):
+	choice = raw_input("Enter 'y' to see the emails in this window:")
 	messages = getReply.split('HTTP/1.1 200 OK')
 	for i in range(1, count + 1):
 		c = str(i)
 		filename = c + '.txt'
-		email = open(path + filename, 'w')
+		#changed mode from w to r+ for choice thing
+		email = open(path + filename, 'r+')
 		email.write(messages[i])
+	if choice == 'y':
+		for line in email:
+			print line
 	return
 
 
-
+#Handles session end
 def quitSession(s):
 	serverReply = TCPTalk(s, 'QUIT')
 	
@@ -139,28 +140,35 @@ def main():
 	print "Welcome to Brad's SMTP + TLS client program!\nEstablishing server connection....\n"
 	
 	clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
+	#TLS BEGINS HERE!!!
+	#The certs file should obviously be updated for whoever else may be using this. In my example
+	#both the server and client have access to the same certs (one folder/one machine).
+	#I think the path required must be the absolute path to the cert as shown below, not relative path.
 	secureCS = ssl.wrap_socket(clientSocket, 
 				   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
 				   cert_reqs=ssl.CERT_REQUIRED,
 				   ssl_version=ssl.PROTOCOL_TLSv1)
 
 	secureCS.connect((serverName, tcpPort))
-	
+	#Server hello message
 	greeting = 'HELO ' + socket.gethostname()
 	global serverHostname 
 	serverHostName = socket.gethostname()
 	serverReply = TCPTalk(secureCS, greeting)
-
+	#Code 220 is helo success
 	if serverReply[:3] != '220':
 		print "Failed to initiate SMTP connection...shutting down"
 		sys.exit(0)
 	
 	print "Server connection initalized, waiting for secure connection...\n"
-	#print "Testing secure connection....\n"	
+	print "Testing secure connection....\n"	
+	#print some fun info about the TLS connection. Optional of course
+	print repr(secureCS.getpeername())
+	print secureCS.cipher()
+	print pprint.pformat(secureCS.getpeercert())
 
 	global user
-
+	#username handling
 	user = raw_input("Please enter your username\n")
 	userEmail = user + eDomain
 
@@ -168,7 +176,7 @@ def main():
 	
 	msg = 'AUTH'
 	serverReply = TCPTalk(secureCS, msg)
-	
+	#protocol implementation from CS447. I think dxnlcm6hbwu6 == base64('username')?
 	if '334 dXNlcm5hbWU6' not in serverReply:
 		print 'Invalid AUTH Reply received....shutting down.'
 		sys.exit(0)

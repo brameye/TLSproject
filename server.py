@@ -2,7 +2,10 @@
 #Brad Meyer brameye@gmail.com
 #sever.py
 #The Server in a basic SMTP-TLS setup. An extension of our SMTP project from CS447 Networking
+#Credit to F. Bone from CS447 who didn't mind helping me fix some small bugs i had on the SMTP stuff.
 #This code can be freely modified or shared to fit your needs.
+
+
 
 import ssl
 import socket
@@ -11,18 +14,24 @@ import os
 import datetime
 import sys
 from random import randint
-
+import pprint
 
 serverHostName = socket.gethostname()
 userFile = "./.user_pass"
 
-
+#This is where threads go to live a happy, fulfilling life as a protocol handler. Eventually they die and are forgotten forever! Yay!
 def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 	cSocket = ssl.wrap_socket(cSocket,
 				server_side=True, 
 				certfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
 				keyfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
 				ssl_version=ssl.PROTOCOL_TLSv1)
+	print "\n ---------------COOL TLS INFORMATION------------------"
+	print repr(cSocket.getpeername())
+	print cSocket.cipher()
+	print pprint.pformat(cSocket.getpeercert())
+	print "-------------------------------------------------------"
+
 	print "Got a TCP connection!\n"
 	authFlag = 0
 	while 1:
