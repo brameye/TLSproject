@@ -16,6 +16,8 @@ import time
 
 #user = "null"
 domain = "@495fs15.edu"
+serverHostName = socket.gethostname()
+
 
 def TCPTalk(s, response):
 	s.send(response)
@@ -77,12 +79,16 @@ def retrieve(socket):
 	print user + ", you have " + serverReply[0] + " messages...\n"
 	if serverReply[0] != '0':
 		messageCount = raw_input("How many emails would you like to retieve?\n")
-		getReq = 'GET /db/' + user + '/ HTTP/1.1\nHost: ' + serverHostname + '\nCount: ' + messageCount
+		getReq = 'GET /db/' + user + '/ HTTP/1.1\nHost: ' + serverHostName + '\nCount: ' + messageCount
 		serverReply = TCPTalk(socket, getReq)
-		if 'HTTP/1.1 200 OK' not in serverReply[0]:
+		#NOTE: REMOVD '[0]' from serverReply's betlow this statement
+		if 'HTTP/1.1 200 OK' not in serverReply:
+			#DEBUG STATEMENT
+			print serverReply
+			print serverReply[0]
 			print "Email retrieveal unsuccessful, please try again"
 			return
-		saveMail(path, int(messageCount), serverReply[0])
+		saveMail(path, int(messageCount), serverReply)
 	else:
 		print "\nThere are no messages available for retrieveal... :(\n"
 	return

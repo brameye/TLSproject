@@ -11,7 +11,7 @@ import os
 import datetime
 import sys
 
-
+serverHostName = socket.gethostname()
 
 def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 	cSocket = ssl.wrap_socket(cSocket,
@@ -25,6 +25,17 @@ def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 		if 'HELO' in msg:
 			heloFlag = 1
 			response = "220 Hello there, old friend"
+		elif 'USER' in msg:
+			user = msg.split(' ')
+			path = 'db/' + user[1] + '/'
+			response = str(countFiles(path))
+		elif 'GET' in msg:
+			m1 = msg.split('/')
+			m2 = msg.split(':')
+			u = m1[2]
+			path = 'db/' + user[1] + '/'
+			count = int(m2[2])
+			response = getEmail(path, count)
 		elif 'MAIL FROM:' in msg:
 			if heloFlag == 1:
 				sender = msg.split(':')
@@ -81,6 +92,21 @@ def CreateEmail(msg):
 	#debug statement
 	print data	
 	return
+
+def getEmail(path, count):
+	files = os.listdir(path)
+	now = timeStamp()
+	c = str(count)
+	emails = ''
+	for i in range(count):
+		msg = str(i+1)
+		data = 'HTTP/1.1 200 OK \nServer: ' + serverHostName + '\nLast-Modified ' + now + '\nCount: ' + c + '\nContent Type: text/plain\nMessage: ' + msg + '\n'
+		email = open(path + files[i], 'r')
+		e = email.read()
+		data = data + e
+		emails = emails + data
+		email.close()
+	return emails
 
 
 def timeStamp():
