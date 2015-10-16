@@ -24,6 +24,17 @@ def TCPTalk(s, response):
 	reply = s.recv(1024)
 	return reply
 
+def PasswordHandler(socket, password):
+	pwflag = 0
+	while pwflag == 0:
+		msg = TCPTalk(socket, password)
+		#DEBUG STATEMENT
+		print msg
+		if '235' in msg:
+			pwflag = 1
+		else:
+			password = raw_input("Invalid Password -- Try Again\nPlease enter your password:")
+	
 def send(socket):
 	#mailfrom
 	mailFrom = user + domain
@@ -122,8 +133,6 @@ def main():
 
 	serverName = sys.argv[1]
 	tcpPort = int(sys.argv[2])
-	#possibly remove UDP?
-	#udpPort = sys.argv[3]
 	eDomain = "@495fs15.edu"
 
 
@@ -136,8 +145,6 @@ def main():
 				   cert_reqs=ssl.CERT_REQUIRED,
 				   ssl_version=ssl.PROTOCOL_TLSv1)
 
-
-
 	secureCS.connect((serverName, tcpPort))
 	
 	greeting = 'HELO ' + socket.gethostname()
@@ -145,47 +152,42 @@ def main():
 	serverHostName = socket.gethostname()
 	serverReply = TCPTalk(secureCS, greeting)
 
-
 	if serverReply[:3] != '220':
 		print "Failed to initiate SMTP connection...shutting down"
 		sys.exit(0)
 	
 	print "Server connection initalized, waiting for secure connection...\n"
-
-	#tell the server that we want TCP TLS
-
-	#msg = "STARTTLS"
-	#serverReply = TCPTalk(clientSocket, msg)
-	
-	#if serverReply[:8] != "STARTTLS":
-	#	print "Error establishing secure SMTP connection...shutting down"
-	
-	#create new secure connection
-
-	#secureCS = ssl.wrap_socket(clientSocket, 
-	#			   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
-	#			   cert_reqs=ssl.CERT_REQUIRED,
-	#			   ssl_version=ssl.PROTOCOL_TLSv1)
-
-	#secrureCS = ssl.wrap_socket(clientSocket, ca_certs="server.crt", cert_reqs=ssl.CERT_REQUIRED)
-
-
-	print "Testing secure connection....\n"	
-
-	#time.sleep(5)
-
-	#msg = "EHLO " + secureCS.gethostname()
-	#serverReply = TCPTalk(secureCS, msg)
-	
-	#if serverReply[:3] != '250':
-	#	print("Error establishing TLS connection. Program shutting down....")
-	#	sys.exit(1)
-
+	#print "Testing secure connection....\n"	
 
 	global user
 
 	user = raw_input("Please enter your username\n")
 	userEmail = user + eDomain
+
+	#authentication stuff
+	
+	msg = 'AUTH'
+	serverReply = TCPTalk(secureCS, msg)
+	
+	if '334 dXNlcm5hbWU6' not in serverReply:
+		print 'Invalid AUTH Reply received....shutting down.'
+		sys.exit(0)
+
+	serverReply = TCPTalk(secureCS, userEmail)
+	
+	if '334 cGFzc3dvcmQ6' in serverReply:
+		data = raw_input("Please enter your password\n")	
+		PasswordHandler(secureCS, data)	
+	elif '330' in serverReply:
+		#code 330 indicates the user is new -- so a new user password was generated, attached after 330
+		password = serverReply.split(" ")
+		print "Welcome " + user + ", your assigned password is " + password[1] + ".\nThis program is now terminating and establishing a new server connection...\n"
+		secureCS.close()
+		time.sleep(3)
+		main() 
+	else:
+		print "Invalid AUTH reply received...shutting down"
+		sys.exit(0)
 
 	while 1:
 		print userEmail + "495fs15 SSMTP Options\n--------------------"

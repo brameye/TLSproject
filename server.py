@@ -10,8 +10,12 @@ import threading
 import os
 import datetime
 import sys
+from random import randint
+
 
 serverHostName = socket.gethostname()
+userFile = "./.user_pass"
+
 
 def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 	cSocket = ssl.wrap_socket(cSocket,
@@ -20,24 +24,49 @@ def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 				keyfile='/home/brad/Documents/REPOS/TLSproject/cert.pem',
 				ssl_version=ssl.PROTOCOL_TLSv1)
 	print "Got a TCP connection!\n"
+	authFlag = 0
 	while 1:
 		msg = cSocket.recv(1024)
 		if 'HELO' in msg:
 			heloFlag = 1
 			response = "220 Hello there, old friend"
+		elif 'AUTH' in msg:
+			cSocket.send('334 dXNlcm5hbWU6')
+			msg = cSocket.recv(1024)
+			user = msg
+			result = LookupUser(user)
+			if '334' in result:
+				cSocket.send(result)
+				pw = cSocket.recv(1024)
+				response = HandleAuthentication(user, pw)
+				while '535' in response:
+					cSocket.send(response)
+					pw = cSocket.recv(1024)
+					response = HandleAuthentication(user, pw)
+				authFlag = 1
+			elif '330' in result:
+				#code 330 indicates new user, so we generate a pass, store it, send it to the user and open a new connection
+				newPass = NewUserRegistration(user)			
+				response = "330 " + str(newPass)
+				cSocket.send(response)
+				cSocket.close()			
 		elif 'USER' in msg:
-			user = msg.split(' ')
-			path = 'db/' + user[1] + '/'
-			response = str(countFiles(path))
+			if authFlag == 1:
+				user = msg.split(' ')
+				path = 'db/' + user[1] + '/'
+				response = str(countFiles(path))
 		elif 'GET' in msg:
-			m1 = msg.split('/')
-			m2 = msg.split(':')
-			u = m1[2]
-			path = 'db/' + user[1] + '/'
-			count = int(m2[2])
-			response = getEmail(path, count)
+			if heloFlag == 1 and authFlag == 1:
+				m1 = msg.split('/')
+				m2 = msg.split(':')
+				u = m1[2]
+				path = 'db/' + user[1] + '/'
+				count = int(m2[2])
+				response = getEmail(path, count)
+			else:
+				response = "503 Bad Sequence of Commands"
 		elif 'MAIL FROM:' in msg:
-			if heloFlag == 1:
+			if heloFlag == 1 and authFlag == 1:
 				sender = msg.split(':')
 				global mailFrom
 				mailFrom = sender[1]
@@ -46,7 +75,7 @@ def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 			else:
 				response = "503 Bad Sequence of Commands"		
 		elif 'RCPT TO:' in msg:
-			if heloFlag == 1:
+			if heloFlag == 1 and authFlag == 1:
 				global rcptTo
 				response = "250 Requested Action Completed"
 				begin = msg.find(':') + 2
@@ -74,8 +103,62 @@ def TCP_Thread_Handler(cSocket, addr, heloFlag, tFlag):
 		else:
 			response = '500 Syntax Error -- command unrecognized'
 
-		cSocket.send(response)
-		
+		if '330' not in response:
+			cSocket.send(response)
+
+
+def NewUserRegistration(user):
+	#this line generates a 5-digit random number sequence to be used as the password for new users
+	pw = int(''.join(["%s" % randint(0, 9) for num in range(0,5)]))
+	#the next lines encode the password + 495 (course number) into base64
+	#and then write the to the userfile "user pass"
+	encodePW = str(pw + 495).encode('base64', 'strict')
+	filename = "./.user_pass"
+	file = open(filename, 'a')
+	file.write(user + " " + encodePW + "\n")
+	return pw
+
+
+def LookupUser(user):
+	msg = '330'
+	name = user.split("@")
+	searchfile = open("./.user_pass", "r")
+	for entry in searchfile:
+		if name[0] in entry:
+			msg = '334 cGFzc3dvcmQ6'
+		#print "no user entry found! creating new user..."
+		#DEBUG PRINT
+	return msg
+
+
+def HandleAuthentication(username, password):
+	if not AnInt(password):
+		#DEBUG STATEMENT
+		print 'No match found!'
+		return '535'
+
+	password = int(password) + 495
+	encodePW = str(password).encode('base64', 'strict')
+	file = open(userFile, 'r')
+	for line in file:
+		data = line.split(" ")
+		if str(data[0]) == str(username):
+			if str(data[1]) == str(encodePW):
+				print '235'
+				#DEBUG PRINT^^^^
+				return '235'
+	#DEBUG
+	print '535'
+	return '535'
+
+
+def AnInt(x):
+	try:
+		int(x)
+		return True
+	except ValueError:
+		return False
+
 
 def CreateEmail(msg):
 	t = timeStamp()
@@ -114,7 +197,10 @@ def timeStamp():
 	return ts
 
 def countFiles(path):
-	num = len([e for e in os.walk(path).next()[2] if e[-6:] == '.email'])
+	#num = len([e for e in os.walk(path).next()[2] if e[-6:] == '.email'])
+	if not os.path.exists(path):
+		return 0
+	num = len([f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))])	
 	return num
 
 
@@ -129,9 +215,13 @@ def CheckRootPath(path):
 def main():
 	tcpPort = int(sys.argv[1])
 
-
+	if not os.path.exists("./.user_pass"):
+		file("./.user_pass", 'w').close()
+		print "Creating user DB..."
 	CheckRootPath("./db/")
 	tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+
 	
 	#possible debug area for 2 argument, currently 1 argument(UDP port)
 
