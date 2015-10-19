@@ -1,4 +1,4 @@
-#CS495 Independent Study Fall 2015 - Secure Network Communications //  Dr. Gamage
+#CS495 Independent Study Fall 2015 - Secure Network Communications //  Dr. Thoshitha Gamage
 # @Southern Illinois University Edwardsville
 #Brad Meyer - brameye@gmail.com
 #client.py -- the clientside in a simple SMTP/TLS program
@@ -50,15 +50,16 @@ def send(socket):
 	#recp to
 	#i did not implement any serious error catching here, other than to check the domain. Consider disallowing special characters for email usernames
 	rcpt = raw_input("Enter the recipient's email. Please include the domain (@495fs15.edu): ")
-	if "495fs15.edu" not in rcpt:
+	while "495fs15.edu" not in rcpt:
 		print "Invalid Email--try again\n"
-		sys.exit(1)
+		rcpt = raw_input("Enter the recipient's email, being sure to include the domain")
+		#sys.exit(1)
 	response = "RCPT TO: " + rcpt
 	serverReply = TCPTalk(socket, response)
 	if serverReply[:3] != '250':
 		print "\nMail Operation Failed...aborting program...."
 		sys.exit(1)
-	print "Please enter the message to be sent. Complete message entry with a '.' on a line by itself.\n"
+	print "\nPlease enter the message to be sent. Complete message entry with a '.' on a line by itself.\n"
 	print 'From	: ' + mailFrom + '\n'
 	print 'To	: ' + rcpt	+ '\n'
 	serverReply = TCPTalk(socket, 'DATA')
@@ -101,28 +102,24 @@ def retrieve(socket):
 
 #This function saves the mail received via the GET statement (retrieve function)
 def saveMail(path, count, getReply):
-	choice = raw_input("Enter 'y' to see the emails in this window:")
+	choice = raw_input("Enter 'y' if you would like to see the emails in this window:")
 	messages = getReply.split('HTTP/1.1 200 OK')
 	for i in range(1, count + 1):
-		c = str(i)
+		count = '%0*d' % (3, i)
+		c = str(count)
 		filename = c + '.txt'
-		#changed mode from w to r+ for choice thing
-		email = open(path + filename, 'r+')
+		email = open(path + filename, 'w')
 		email.write(messages[i])
-	if choice == 'y':
-		for line in email:
-			print line
+		if choice == 'y':
+			print messages[i] #this prints some questionable data like count, content type, server etc
 	return
 
 
 #Handles session end
 def quitSession(s):
 	serverReply = TCPTalk(s, 'QUIT')
-	
-	if serverReply[:3] == '221':
-		print "Program shutting down, goodbye....\n"
 	s.close()
-	exit()
+	sys.exit(0)
 
 def main():
 	smtpCommands = {
@@ -137,7 +134,7 @@ def main():
 	eDomain = "@495fs15.edu"
 
 
-	print "Welcome to Brad's SMTP + TLS client program!\nEstablishing server connection....\n"
+	print "/\/\/\/\ Welcome to Brad's SMTP + TLS client program! /\/\/\/\ \nEstablishing server connection....\n"
 	
 	clientSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	#TLS BEGINS HERE!!!
@@ -148,6 +145,7 @@ def main():
 				   ca_certs='/home/brad/Documents/REPOS/TLSproject/cert.pem',
 				   cert_reqs=ssl.CERT_REQUIRED,
 				   ssl_version=ssl.PROTOCOL_TLSv1)
+
 
 	secureCS.connect((serverName, tcpPort))
 	#Server hello message
@@ -162,14 +160,15 @@ def main():
 	
 	print "Server connection initalized, waiting for secure connection...\n"
 	print "Testing secure connection....\n"	
-	#print some fun info about the TLS connection. Optional of course
+	#print some fun info about the TLS connection. Optional of course, but used in this instance to test and prove that the connection exists
 	print repr(secureCS.getpeername())
 	print secureCS.cipher()
 	print pprint.pformat(secureCS.getpeercert())
 
+
 	global user
 	#username handling
-	user = raw_input("Please enter your username\n")
+	user = raw_input("\nPlease enter your username\n")
 	userEmail = user + eDomain
 
 	#authentication stuff
@@ -190,15 +189,16 @@ def main():
 		#code 330 indicates the user is new -- so a new user password was generated, attached after 330
 		password = serverReply.split(" ")
 		print "Welcome " + user + ", your assigned password is " + password[1] + ".\nThis program is now terminating and establishing a new server connection...\n"
-		secureCS.close()
 		time.sleep(3)
+		secureCS.close()
+		#time.sleep(3)
 		main() 
 	else:
 		print "Invalid AUTH reply received...shutting down"
 		sys.exit(0)
 
 	while 1:
-		print userEmail + "495fs15 SSMTP Options\n--------------------"
+		print "\n" + userEmail + "Secure SMTP Options\n--------------------"
 		print "(1) Send an email\n(2) Retrieve your Emails\n(3) Quit\n"
 		choice = raw_input("Please enter either 1, 2, or 3:  \n")
 		if choice in smtpCommands:
